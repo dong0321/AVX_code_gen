@@ -1,0 +1,6 @@
+#code gen
+    first pack all together as a contigous buff.
+    then split to small pieces or use as contiguous pack.
+
+#JIT
+    need to support avx
