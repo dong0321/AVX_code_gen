@@ -1,4 +1,5 @@
 import sys
+import Get_size_type
 """
 __m512i _mm512_i32extgather_epi32 (__m512i index, void const * mv, _MM_UPCONV_EPI32_ENUM conv, int scale, int hint)
 
@@ -52,11 +53,27 @@ def print_gather(intel512type, intel512toC, intel512UPconv,elem_in_vector,number
             }
     print gather_ins% params
 
+gather_pack = """
+void gather_pack(uint32_t cnt, uint32_t *offsets, offvoid *_src, void *_dst){
+    int i = 0;
+    %(GET_TYPE)s* src = (%(GET_TYPE)s*)_src;
+    %(GET_TYPE)s* dst = (%(GET_TYPE)s*)_dst;
+"""
+def print_gather_pack(MPI_TYPE):
+    params = {
+            'GET_TYPE'       : str(Get_size_type.get_type(MPI_TYPE)),
+            }
+    print gather_pack % params
+
+
 def gen_gather_code(offsets, MPI_TYPE, elem_in_vector):
     intel512type = AVX512_type[MPI_TYPE]
     intel512toC = AVX512_to_C[MPI_TYPE]
     intel512UPconv = AVX512_UPCONV[MPI_TYPE]
+
+    print_gather_pack(MPI_TYPE)
+
     print_gather_first(intel512type,intel512toC,intel512UPconv,elem_in_vector, 0)
     for number_of_gather in range (1, len(offsets)/elem_in_vector):
         print_gather(intel512type,intel512toC,intel512UPconv,elem_in_vector,number_of_gather)
-
+    print "}"

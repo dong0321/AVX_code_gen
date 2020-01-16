@@ -1,12 +1,15 @@
 import sys
 import AVX512_gather
+import Manual_pack
+import Get_size_type
+
 import array as arr
 
 all_classes = {
     'AVX512_gather'   : AVX512_gather,
+    'Manual_pack'     : Manual_pack,
 }
 
-#global MPI_TYPES={'MPI_FLOAT': 4, 'MPI_INT': 4, 'MPI_DOUBLE': 4}
 global type_size
 global count
 global elem_in_vector
@@ -17,37 +20,30 @@ global elem_in_vector
 __m512i _mm512_i32extgather_epi32 (__m512i index, void const * mv, _MM_UPCONV_EPI32_ENUM conv, int scale, int hint)
 """
 
-FILE_HEADER ="""
-// Program generated automatically
+FILE_HEADER ="""/* Python generated automatically */
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <stdint.h>
 #include <sys/time.h>
 #include <immintrin.h>
+#include <sys/types.h>
 """
 
 TEST_PROGRAM = """
-    uint32_t blocks[%(CNT)s] = {%(BLOCKS)s};
+uint32_t blocks[%(CNT)s] = {%(BLOCKS)s};
 
-    uint32_t displacements[%(CNT)s] = {%(DIS)s};
+uint32_t displacements[%(CNT)s] = {%(DIS)s};
 
-    uint32_t off_sets[%(INDEX_CNT)s] = {%(OFF_SETS)s};
+uint32_t off_sets[%(INDEX_CNT)s] = {%(OFF_SETS)s};
 
-    %(BASE_TYPE)s indexed_array[%(CNT)s*%(CNT)s+2] = {%(INDEX_ARRAY)s};
+%(BASE_TYPE)s indexed_array[%(CNT)s*%(CNT)s+2 -1] = {%(INDEX_ARRAY)s};
 
-    %(BASE_TYPE)s packed[%(INDEX_CNT)s];
-    //MPI_Datatype ddt;
-    //MPI_Type_indexed( count, blocks, displacements, %(BASE_TYPE)s, &ddt );
-    //MPI_Type_commit( &ddt );
+%(BASE_TYPE)s packed[%(INDEX_CNT)s];
+//MPI_Datatype ddt;
+//MPI_Type_indexed( count, blocks, displacements, %(BASE_TYPE)s, &ddt );
+//MPI_Type_commit( &ddt );
 """
-
-def get_size(MPI_TYPE):
-    MPI_TYPES={'MPI_FLOAT': 4, 'MPI_INT': 4, 'MPI_DOUBLE': 8}
-    return MPI_TYPES[MPI_TYPE]
-
-def get_type(MPI_TYPE):
-    MPI_TYPES={'MPI_FLOAT': 'float', 'MPI_INT': 'uint32_t', 'MPI_DOUBLE': 'double'}
-    return MPI_TYPES[MPI_TYPE]
 
 def generate_index(count):
     block_list = [0]*count
@@ -98,40 +94,23 @@ def print_program(generator_name, count, count1, off_sets, blocks, displacements
         'DIS'             : ', '.join(map(str,displacements)),
         'INDEX_ARRAY'     : ', '.join(map(str,indexed_array)),
         'CNT'             : int(count),
-        'BASE_TYPE'       : str(get_type(MPI_TYPE)),
+        'BASE_TYPE'       : str(Get_size_type.get_type(MPI_TYPE)),
     }
     print TEST_PROGRAM % params
 
-manual_pack = """
-void manual_pack(uint32_t cnt, uint32_t * Blocks, uint32_t * Displacements, void *_src, void *_dst){
-    int i = 0;
-    %(GET_TYPE)s* src = (%(GET_TYPE)s*)_src;
-    %(GET_TYPE)s* dst = (%(GET_TYPE)s*)_dst;
-    for (i=0; i<cnt; i++){
-        src = src + Displacements[i];
-        memcpy((void*)dst,(void*)src, sizeof(%(GET_TYPE)s)*Blocks[i]);
-        dst = dst +Blocks[i];
-    }
+calculate_time="""
+struct timeval tstart, tend;
+static double elapsed(const struct timeval *start,
+                      const struct timeval *end)
+{
+    return (1e6*(end->tv_sec - start->tv_sec) + (end->tv_usec - start->tv_usec));
 }
 """
-
-def print_manual_pack(MPI_TYPE):
-    params = {
-        'GET_TYPE'       : str(get_type(MPI_TYPE)),
-    }
-    print manual_pack % params
 
 gen_main = """
 int main(){
     int i;
-    manual_pack(%(CNT)s, blocks, displacements, indexed_array, packed);
 """
-
-def print_main(count):
-    params = {
-        'CNT'       : int(count),
-    }
-    print gen_main % params
 
 def main():
     args = sys.argv[1:]
@@ -139,15 +118,12 @@ def main():
     MPI_TYPE = args[1]
     count = int(args[2])
 
-    type_size = get_size(MPI_TYPE)
+    type_size = Get_size_type.get_size(MPI_TYPE)
     #print type_size
     elem_in_vector = 512 / 8 / type_size
     #print elem_in_vector
     print FILE_HEADER
-    print "/* Auto-generated gather code for "
-    print MPI_Datatype
-    print (MPI_TYPE,type_size)
-    print "*/"
+    print "/* Auto-generated gather code for MPI_Datatype:", MPI_Datatype," MPI_TYPE:",MPI_TYPE,"of type size:",type_size,"*/"
     (blocks,displacements,indexed_array)=generate_index(count)
 #    print blocks
 #    print displacements
@@ -156,16 +132,24 @@ def main():
     count1=len(off_sets)
     print_program(MPI_Datatype, count, count1,off_sets, blocks, displacements, MPI_TYPE,indexed_array)
 #    print off_sets
-    print_manual_pack(MPI_TYPE)
-    print_main(count)
+    print calculate_time
+    Manual_pack.print_manual_pack(MPI_TYPE)
 
-    print "    for(i=0;i<32;i++)"
-    print "        printf(\"","%f\",","packed[i]);"
+    ### start generate main func
+    print gen_main
 
-    print "return 0;"
+    print "    gettimeofday(&tstart, NULL);"
+
+    ### Func calls
+    print "    manual_pack(",count,", blocks, displacements, indexed_array, packed);"
+    print "    gettimeofday(&tend, NULL);"
+    print "    printf(\"##Time used(in macro seconds): %f \\n\" , ","elapsed(&tstart,&tend) );"
+
+
+    print "    return 0;"
     print "}"
 
-    #function = AVX512_gather.gen_gather_code(off_sets,MPI_TYPE,elem_in_vector)
+    AVX512_gather.gen_gather_code(off_sets,MPI_TYPE,elem_in_vector)
 
 
 if __name__ == '__main__':
