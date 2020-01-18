@@ -1,19 +1,35 @@
 .PHONY: clean
 
-FLAGS=-O3 -Wall -Wpedantic -march=native -std=gcc
+CC = icc
+FLAGS=-O3 -Wall -march=skylake-avx512
 
-ALL=demo1\
+ALL=demo_float\
+	demo_int\
+	demo_double\
 
 DEPS_TEST=generate_gather_pack.py $(DEPS)
 
 run: $(ALL)
-	./demo1
+	./demo_float
+	./demo_int
+	./demo_double
 
-demo1: demo1.c
-#	$(gcc) $(FLAGS) -o $@ $<
-	gcc -o $@ $<
-demo1.c: $(DEPS_TEST)
-	python generate_gather_pack.py vector MPI_FLOAT 16 >/tmp/$@
+demo_float: demo_float.c
+	$(CC) $(FLAGS) -o $@ $<
+demo_float.c: $(DEPS_TEST)
+	python generate_gather_pack.py vector MPI_FLOAT 128 >/tmp/$@
+	mv /tmp/$@ $@
+
+demo_int: demo_int.c
+	$(CC) $(FLAGS) -o $@ $<
+demo_int.c: $(DEPS_TEST)
+	python generate_gather_pack.py vector MPI_INT 128 >/tmp/$@
+	mv /tmp/$@ $@
+
+demo_double: demo_double.c
+	    $(CC) $(FLAGS) -o $@ $<
+demo_double.c: $(DEPS_TEST)
+	python generate_gather_pack.py vector MPI_DOUBLE 128 >/tmp/$@
 	mv /tmp/$@ $@
 
 clean:

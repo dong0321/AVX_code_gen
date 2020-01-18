@@ -112,6 +112,25 @@ int main(){
     int i;
 """
 
+papi_start="""
+    int NUM_EVENTS = 3;
+    int events[3] = {PAPI_L1_DCM, PAPI_L2_DCM, PAPI_L3_DCM};
+    int eventset = PAPI_NULL;
+    long long values[NUM_EVENTS];
+    int retval;
+    retval = PAPI_library_init(PAPI_VER_CURRENT);
+    retval = PAPI_create_eventset(&eventset);
+    retval = PAPI_add_events(eventset, events, NUM_EVENTS);
+    PAPI_start(eventset);
+"""
+papi_end="""
+    PAPI_stop(eventset, values);
+    printf("send message_size %d copied %d t1 miss %zu t2 %zu t3 %zu\n",
+    count*64,
+    count*4,
+    values[0], values[1], values[2]);
+"""
+
 def main():
     args = sys.argv[1:]
     MPI_Datatype = args[0]
@@ -132,25 +151,35 @@ def main():
     count1=len(off_sets)
     print_program(MPI_Datatype, count, count1,off_sets, blocks, displacements, MPI_TYPE,indexed_array)
 #    print off_sets
+
+    ### Sub-function init
     print calculate_time
     Manual_pack.print_manual_pack(MPI_TYPE)
+    AVX512_gather.gen_gather_code(off_sets,MPI_TYPE,elem_in_vector)
 
     ### start generate main func
     print gen_main
 
-    print "    gettimeofday(&tstart, NULL);"
 
     ### Func calls
+    print papi_start
+    print "    gettimeofday(&tstart, NULL);"
     print "    manual_pack(",count,", blocks, displacements, indexed_array, packed);"
     print "    gettimeofday(&tend, NULL);"
     print "    printf(\"##Time used(in macro seconds): %f \\n\" , ","elapsed(&tstart,&tend) );"
+    print papi_end
+    print ""
 
+    print "    gettimeofday(&tstart, NULL);"
+    print "    gather_pack(",count,", off_sets, indexed_array, packed);"
+    print "    gettimeofday(&tend, NULL);"
+    print "    printf(\"##Time used(in macro seconds): %f \\n\" , ","elapsed(&tstart,&tend) );"
+
+    #print "    for(i=0;i<32;i++)"
+    #print "        printf(\"","%f\",","packed[i]);"
 
     print "    return 0;"
     print "}"
-
-    AVX512_gather.gen_gather_code(off_sets,MPI_TYPE,elem_in_vector)
-
 
 if __name__ == '__main__':
     main()
