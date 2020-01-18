@@ -27,7 +27,8 @@ FILE_HEADER ="""/* Python generated automatically */
 #include <stdint.h>
 #include <sys/time.h>
 #include <immintrin.h>
-#include <sys/types.h>
+#include <unistd.h>
+#include <papi.h>
 """
 
 TEST_PROGRAM = """
@@ -113,10 +114,10 @@ int main(){
 """
 
 papi_start="""
-    int NUM_EVENTS = 3;
-    int events[3] = {PAPI_L1_DCM, PAPI_L2_DCM, PAPI_L3_DCM};
+    int NUM_EVENTS = 6;
+    int events[6] = {PAPI_L1_DCM, PAPI_L1_ICM, PAPI_L2_DCM, PAPI_L2_ICM, PAPI_L3_DCM, PAPI_L3_ICM};
     int eventset = PAPI_NULL;
-    long long values[NUM_EVENTS];
+    uint64_t values[NUM_EVENTS];
     int retval;
     retval = PAPI_library_init(PAPI_VER_CURRENT);
     retval = PAPI_create_eventset(&eventset);
@@ -125,17 +126,38 @@ papi_start="""
 """
 papi_end="""
     PAPI_stop(eventset, values);
-    printf("send message_size %d copied %d t1 miss %zu t2 %zu t3 %zu\n",
-    count*64,
-    count*4,
-    values[0], values[1], values[2]);
+    printf("PAPI_L1_DCM, PAPI_L1_ICM, PAPI_L2_DCM, PAPI_L2_ICM, PAPI_L3_DCM, PAPI_L3_ICM");
+    printf("\\n%12lu %12lu %12lu %12lu %12lu %12lu \\n", values[0], values[1], values[2], values[3], values[4], values[5]);
 """
+
+flush_cache="""
+#define L1size sysconf(_SC_LEVEL1_DCACHE_SIZE)
+#define L2size sysconf(_SC_LEVEL2_CACHE_SIZE)
+#define L3size sysconf(_SC_LEVEL2_CACHE_SIZE)
+void cache_flush(){
+char *cache = (char*)calloc(L1size+L2size+L3size, sizeof(char));
+free(cache);
+}
+"""
+
+
+def print_papi_end(count):
+    params = {
+        'CNT'       : int(count),
+    }
+    print papi_end
 
 def main():
     args = sys.argv[1:]
     MPI_Datatype = args[0]
     MPI_TYPE = args[1]
     count = int(args[2])
+
+    #select_pack = manual | gather
+    select_pack=args[3]
+
+    #papi_yes|papi_no
+    papi_yes = args[4]
 
     type_size = Get_size_type.get_size(MPI_TYPE)
     #print type_size
@@ -160,22 +182,24 @@ def main():
     ### start generate main func
     print gen_main
 
+    #print "    for(i=0;i<",count,";i++)"
+    #print "        printf(\"","%f\",","packed[i]);"
 
     ### Func calls
-    print papi_start
+    if papi_yes=='papi_yes':
+        print papi_start
     print "    gettimeofday(&tstart, NULL);"
-    print "    manual_pack(",count,", blocks, displacements, indexed_array, packed);"
+    if select_pack == 'manual':
+        print "    manual_pack(",count,", blocks, displacements, indexed_array, packed);"
+    else:
+        print "    gather_pack(",count,", off_sets, indexed_array, packed);"
     print "    gettimeofday(&tend, NULL);"
     print "    printf(\"##Time used(in macro seconds): %f \\n\" , ","elapsed(&tstart,&tend) );"
-    print papi_end
-    print ""
+    if papi_yes=='papi_yes':
+        print_papi_end(count)
 
-    print "    gettimeofday(&tstart, NULL);"
-    print "    gather_pack(",count,", off_sets, indexed_array, packed);"
-    print "    gettimeofday(&tend, NULL);"
-    print "    printf(\"##Time used(in macro seconds): %f \\n\" , ","elapsed(&tstart,&tend) );"
-
-    #print "    for(i=0;i<32;i++)"
+    print flush_cache
+    #print "    for(i=0;i<",count,";i++)"
     #print "        printf(\"","%f\",","packed[i]);"
 
     print "    return 0;"
