@@ -29,6 +29,7 @@ FILE_HEADER ="""/* Python generated automatically */
 #include <immintrin.h>
 #include <unistd.h>
 #include <papi.h>
+//#include <libgccjit.h>
 """
 
 TEST_PROGRAM = """
@@ -54,7 +55,7 @@ def generate_index(count):
     displacements = arr.array('l', dis_list)
     indexed_array = arr.array('l', index_array)
     for i in range (0, count):
-        blocks[i] =2
+        blocks[i] = 1 #2
         displacements[i] = i + i * count;
         #for j in range (0,blocks[i]):
          #  indexed_array[i + i * count + j] = i*count+j+1
@@ -115,9 +116,10 @@ int main(){
 
 papi_start="""
     int NUM_EVENTS = 6;
-    int events[6] = {PAPI_L1_DCM, PAPI_L1_ICM, PAPI_L2_DCM, PAPI_L2_ICM, PAPI_L3_DCM, PAPI_L3_ICM};
+    int events[6] = {PAPI_L1_DCM, PAPI_L1_ICM, PAPI_L2_DCM, PAPI_L2_ICM, PAPI_L3_DCM, PAPI_L3_ICM};//, PAPI_L1_TCA,PAPI_L2_TCA,PAPI_L3_TCA};
     int eventset = PAPI_NULL;
-    uint64_t values[NUM_EVENTS];
+    long long values[NUM_EVENTS];
+    memset(values, 0, NUM_EVENTS);
     int retval;
     retval = PAPI_library_init(PAPI_VER_CURRENT);
     retval = PAPI_create_eventset(&eventset);
@@ -126,8 +128,9 @@ papi_start="""
 """
 papi_end="""
     PAPI_stop(eventset, values);
-    printf("PAPI_L1_DCM, PAPI_L1_ICM, PAPI_L2_DCM, PAPI_L2_ICM, PAPI_L3_DCM, PAPI_L3_ICM");
-    printf("\\n%12lu %12lu %12lu %12lu %12lu %12lu \\n", values[0], values[1], values[2], values[3], values[4], values[5]);
+    printf("PAPI_L1_DCM, PAPI_L1_ICM, PAPI_L2_DCM, PAPI_L2_ICM, PAPI_L3_DCM, PAPI_L3_ICM");//,PAPI_L1_TCA,PAPI_L2_TCA,PAPI_L3_TCA");
+    printf("\\n%12lu %12lu %12lu %12lu %12lu %12lu\\n", values[0], values[1], values[2], values[3], values[4], values[5]);
+    //,values[6],values[7],values[8]);
 """
 
 flush_cache="""
@@ -194,7 +197,7 @@ def main():
     else:
         print "    gather_pack(",count,", off_sets, indexed_array, packed);"
     print "    gettimeofday(&tend, NULL);"
-    print "    printf(\"##Time used(in macro seconds): %f \\n\" , ","elapsed(&tstart,&tend) );"
+    print "    printf(\"##Time used(in macro seconds): %lf \\n\" , ","elapsed(&tstart,&tend) );"
     if papi_yes=='papi_yes':
         print_papi_end(count)
 

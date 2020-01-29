@@ -1,7 +1,7 @@
 .PHONY: clean
 
 CC = icc
-FLAGS=-O3 -Wall -march=skylake-avx$(count)
+FLAGS=-O3 -Wall -march=skylake-avx512
 
 ALL=demo_float\
 	demo_int\
@@ -15,7 +15,7 @@ run: $(ALL)
 #	./demo_double
 
 demo_float: demo_float.c
-	$(CC) $(FLAGS) -o $@ $< -lpapi
+	$(CC) $(FLAGS) -o $@ $< -lpapi #-lgccjit
 demo_float.c: $(DEPS_TEST)
 	python generate_gather_pack.py vector MPI_FLOAT $(count) $(pack_select) $(papi_yesno) >/tmp/$@
 	mv /tmp/$@ $@

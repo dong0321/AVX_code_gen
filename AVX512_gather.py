@@ -27,17 +27,23 @@ init_vars = """
 """
 
 gather_ins = """
-    index  =  _mm512_loadu_si512(offsets+%(NUMBER_OF_GATHER)s*%(ELEM_IN_VEC)s);
-    gathered_vector = _mm512_i32extgather_%(512_TO_C)s( index, src, %(512_UPCONV)s, 4, 0 );
-    _mm512_store_%(512_TO_C)s(dst,gathered_vector);
-    dst += %(ELEM_IN_VEC)s;
+    //index  =  _mm512_loadu_si512(offsets+%(NUMBER_OF_GATHER)s*%(ELEM_IN_VEC)s);
+    //gathered_vector = _mm512_i32extgather_%(512_TO_C)s( index, src, %(512_UPCONV)s, 4, 0 );
+    for(i=0;i<%(NUMBER_OF_GATHER)s;i++){
+        index = _mm512_loadu_si512(offsets+i*%(ELEM_IN_VEC)s);
+        gathered_vector = _mm512_i32extgather_%(512_TO_C)s( index, src, %(512_UPCONV)s, 4, 0 );
+        _mm512_store_%(512_TO_C)s(dst,gathered_vector);
+        dst += %(ELEM_IN_VEC)s;
+     }
 """
 
 double_gather_ins = """
-    index = _mm256_loadu_si256(offsets+%(NUMBER_OF_GATHER)s*%(ELEM_IN_VEC)s);
+    for(i=0;i<%(NUMBER_OF_GATHER)s;i++){
+    index = _mm256_loadu_si256(offsets+i*%(ELEM_IN_VEC)s);
+    //index = _mm256_loadu_si256(offsets+%(NUMBER_OF_GATHER)s*%(ELEM_IN_VEC)s);
     gathered_vector = _mm512_i32gather_%(512_TO_C)s( index, src, 8);
     _mm512_store_%(512_TO_C)s(dst,gathered_vector);
-    dst += %(ELEM_IN_VEC)s;
+    dst += %(ELEM_IN_VEC)s;}
 """
 
 def print_init_vars(MPI_TYPE,elem_in_vector,number_of_gather):
@@ -78,6 +84,7 @@ def gen_gather_code(offsets, MPI_TYPE, elem_in_vector):
 
     print_gather_pack(MPI_TYPE)
     print_init_vars(MPI_TYPE,elem_in_vector, 0)
-    for number_of_gather in range (0, len(offsets)/elem_in_vector):
-        print_gather(MPI_TYPE,elem_in_vector,number_of_gather)
+    #for number_of_gather in range (0, len(offsets)/elem_in_vector):
+    #    print_gather(MPI_TYPE,elem_in_vector,number_of_gather)
+    print_gather(MPI_TYPE,elem_in_vector,len(offsets)/elem_in_vector)
     print "}"
