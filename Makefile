@@ -1,37 +1,21 @@
-.PHONY: clean
+CC=icpc #clang
+CFLAGS=-std=c++11 -g `llvm-config --cflags`
+LD=icpc#clang++
+LDFLAGS=`llvm-config --cxxflags --ldflags --libs core executionengine mcjit interpreter analysis native bitwriter --system-libs`
 
-CC = icc
-FLAGS=-O3 -Wall -march=skylake-avx512
+all: int_jit_llvm
 
-ALL=demo_float\
-	demo_int\
-	demo_double\
+int_jit_llvm.o: int_jit_llvm.c
+	    $(CC) $(CFLAGS) -c $<
 
-DEPS_TEST=generate_gather_pack.py $(DEPS)
+int_jit_llvm: int_jit_llvm.o
+	    $(LD) $< $(LDFLAGS) -o $@
 
-run: $(ALL)
-#	./demo_float
-#	./demo_int
-#	./demo_double
+int_jit_llvm.bc: int_jit_llvm
+	    ./int_jit_llvm 0 0
 
-demo_float: demo_float.c
-	$(CC) $(FLAGS) -o $@ $< -lpapi #-lgccjit
-demo_float.c: $(DEPS_TEST)
-	python generate_gather_pack.py vector MPI_FLOAT $(count) $(pack_select) $(papi_yesno) >/tmp/$@
-	mv /tmp/$@ $@
-
-demo_int: demo_int.c
-	$(CC) $(FLAGS) -o $@ $< -lpapi
-demo_int.c: $(DEPS_TEST)
-	python generate_gather_pack.py vector MPI_INT $(count) $(pack_select) $(papi_yesno) >/tmp/$@
-	mv /tmp/$@ $@
-
-demo_double: demo_double.c
-	    $(CC) $(FLAGS) -o $@ $< -lpapi
-demo_double.c: $(DEPS_TEST)
-	python generate_gather_pack.py vector MPI_DOUBLE $(count) $(pack_select) $(papi_yesno)  >/tmp/$@
-	mv /tmp/$@ $@
+int_jit_llvm.ll: int_jit_llvm.bc
+	    llvm-dis $<
 
 clean:
-	$(RM) demo*
-
+	    -rm -f int_jit_llvm.o int_jit_llvm int_jit_llvm.bc int_jit_llvm.ll

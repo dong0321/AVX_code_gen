@@ -31,7 +31,8 @@ gather_ins = """
     //gathered_vector = _mm512_i32extgather_%(512_TO_C)s( index, src, %(512_UPCONV)s, 4, 0 );
     for(i=0;i<%(NUMBER_OF_GATHER)s;i++){
         index = _mm512_loadu_si512(offsets+i*%(ELEM_IN_VEC)s);
-        gathered_vector = _mm512_i32extgather_%(512_TO_C)s( index, src, %(512_UPCONV)s, 4, 0 );
+        //gathered_vector = _mm512_i32extgather_%(512_TO_C)s( index, src, %(512_UPCONV)s, 4, 0 );
+        gathered_vector = _mm512_i32gather_%(512_TO_C)s( index, src, 4);
         _mm512_store_%(512_TO_C)s(dst,gathered_vector);
         dst += %(ELEM_IN_VEC)s;
      }
@@ -51,7 +52,7 @@ def print_init_vars(MPI_TYPE,elem_in_vector,number_of_gather):
         '512_TYPE'       : str(AVX512_type[MPI_TYPE]),
         '512_INDEX'      :str(AVX512_index_type[MPI_TYPE]),
         }
-    print init_vars% params
+    print (init_vars% params)
 
 def print_gather(MPI_TYPE,elem_in_vector,number_of_gather):
     params = {
@@ -63,9 +64,9 @@ def print_gather(MPI_TYPE,elem_in_vector,number_of_gather):
         '512_INDEX'      :str(AVX512_index_type[MPI_TYPE]),
         }
     if MPI_TYPE == 'MPI_DOUBLE':
-        print double_gather_ins% params
+        print (double_gather_ins% params)
     else:
-        print gather_ins% params
+        print (gather_ins% params)
 
 gather_pack = """
 void gather_pack(uint32_t cnt, uint32_t *offsets, void *_src, void *_dst){
@@ -77,7 +78,7 @@ def print_gather_pack(MPI_TYPE):
     params = {
             'GET_TYPE'       : str(Get_size_type.get_type(MPI_TYPE)),
             }
-    print gather_pack % params
+    print (gather_pack % params)
 
 
 def gen_gather_code(offsets, MPI_TYPE, elem_in_vector):
@@ -87,4 +88,4 @@ def gen_gather_code(offsets, MPI_TYPE, elem_in_vector):
     #for number_of_gather in range (0, len(offsets)/elem_in_vector):
     #    print_gather(MPI_TYPE,elem_in_vector,number_of_gather)
     print_gather(MPI_TYPE,elem_in_vector,len(offsets)/elem_in_vector)
-    print "}"
+    print ("}")

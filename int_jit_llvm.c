@@ -82,49 +82,90 @@ define <8 x i32> @foo(<8 x i32>%a, <8 x i32*> %p) {
 */
 int main(){
     int i;
-    LLVMModuleRef module = LLVMModuleCreateWithName("gather_module");
-    LLVMBuilderRef builder = LLVMCreateBuilder();
-    //LLVMTypeRef args[] = { LLVMInt32Type(), LLVMInt32Type() };
-    //LLVMTypeRef fnType = LLVMFunctionType(LLVMInt32Type(), args, 2, 0);
-    //LLVMValueRef fn = LLVMAddFunction(module, "sum", fnType);
-    //LLVMBasicBlockRef block = LLVMAppendBasicBlock(fn, "entry");
-    //LLVMPositionBuilderAtEnd(builder, block); 
+
+    //stage 1 LLVM basics
+    LLVMModuleRef module;
+    LLVMContextRef Context;
+    LLVMBuilderRef builder;
+
+    module = LLVMModuleCreateWithName("gather_module");
+    Context=LLVMGetModuleContext(module);
+    builder = LLVMCreateBuilder();
+
+    /*
+    LLVMTypeRef args[] = { LLVMInt32Type(), LLVMInt32Type() };
+    LLVMTypeRef fnType = LLVMFunctionType(LLVMInt32Type(), args, 4, 0);
+    LLVMValueRef fn = LLVMAddFunction(module, "sum", fnType);
+    LLVMBasicBlockRef block = LLVMAppendBasicBlock(fn, "entry");
+    LLVMPositionBuilderAtEnd(builder, block); 
+    */
     int src_width=32;
     int dst_width =32;
     int length = 8;
-    LLVMContextRef Context = LLVMContextCreate();
 
+    LLVMTypeRef i1_type;
+    LLVMTypeRef i8_type;
+    LLVMTypeRef i32_type;
+    LLVMTypeRef i8ptr_type;
+
+    i1_type=LLVMInt1Type();
+    i8_type=LLVMInt8Type();
+    i32_type=LLVMInt32Type();
+    i8ptr_type=LLVMPointerType(i8_type,0);
+
+    /* different way of doing Typeref
     LLVMTypeRef i32_type  = LLVMIntTypeInContext(Context, 32);
     LLVMTypeRef src_type = LLVMIntTypeInContext(Context, src_width);
     LLVMTypeRef src_vec_type = LLVMVectorType(src_type, length);
+    */
+
+    // array of num_of_elements = length with type i32_type
+    LLVMTypeRef src_vec_type = LLVMVectorType(i32_type, length);
+
 
     LLVMTypeRef dst_type = LLVMIntTypeInContext(Context,32);
     LLVMTypeRef dst_vec_type = LLVMVectorType(dst_type, length);
-    
-    LLVMValueRef res;
-    LLVMValueRef offsets; 
-    LLVMValueRef function;
+    printf("H1\n"); 
+    LLVMValueRef results;
+    LLVMTypeRef function;
     //const uint8_t *base_ptr;
+    
     LLVMValueRef base_ptr;
+    LLVMValueRef passthru;
+    LLVMValueRef mask;
+    LLVMValueRef offsets;
+    LLVMValueRef scale;
+
     // generate all 1 mask
     const char *intrinsic = NULL;
-    intrinsic = "llvm.x86.avx2.gather.d.d";
-    LLVMTypeRef i8_type = LLVMIntTypeInContext(Context, 8);
-    LLVMValueRef passthru = LLVMGetUndef(src_vec_type);
-    LLVMValueRef mask = LLVMConstAllOnes(src_vec_type);
+    //intrinsic = "llvm.x86.avx2.gather.d.d";
+    intrinsic = "llvm.masked.gather.v16f32.v16p0f32";
+
+    base_ptr = LLVMConstInt(i8_type, 1, 0);
+    passthru = LLVMGetUndef(src_vec_type);
+    offsets = LLVMConstInt(i32_type,0,false); 
+    /* do need both AllOnes and Bitcast */
+    mask = LLVMConstAllOnes(src_vec_type);
     mask = LLVMConstBitCast(mask, src_vec_type);
-    LLVMValueRef scale = LLVMConstInt(i8_type, 1, 0);
+    scale = LLVMConstInt(i8_type,'i',false);
+    
+    LLVMTypeRef types[]={ i32_type, i32_type, i32_type, i1_type, i8_type};
+    function = LLVMFunctionType(i8ptr_type,types,5,false); 
+    LLVMValueRef func_value = LLVMAddFunction(module, intrinsic, function);
 
     LLVMValueRef args[] = { passthru, base_ptr, offsets, mask, scale };
-    function = LLVMGetNamedFunction(module, intrinsic);
-    LLVMBuildCall(builder, function, args, 4, "");
+    LLVMBuildCall(builder, func_value, args, 5, "");
+    printf("H6\n");
+    /* declare <16 x float> @llvm.masked.gather.v16f32.v16p0f32   (<16 x float*> <ptrs>, i32 <alignment>, <16 x i1> <mask>, <16 x float> <passthru>) */
 
-    //LLVMValueRef one = LLVMGetParam(fn, 0);
-    //LLVMValueRef two = LLVMGetParam(fn, 1);
-    //LLVMSetValueName(one, "x");
-    //LLVMSetValueName(two, "y");
-    //LLVMValueRef results = LLVMBuildAdd(builder, one, two, "results");
-    LLVMBuildRet(builder, res);
+    /*
+       LLVMValueRef one = LLVMGetParam(fn, 0);
+       LLVMValueRef two = LLVMGetParam(fn, 1);
+       LLVMSetValueName(one, "x");
+       LLVMSetValueName(two, "y");
+       LLVMValueRef results = LLVMBuildAdd(builder, one, two, "results");
+       */
+    LLVMBuildRet(builder, results);
     char* err = NULL;
     LLVMVerifyModule(module, LLVMAbortProcessAction, &err);
     LLVMDisposeMessage(err);

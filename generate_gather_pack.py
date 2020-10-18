@@ -5,6 +5,9 @@ import Get_size_type
 
 import array as arr
 
+from random import randrange
+
+
 all_classes = {
     'AVX512_gather'   : AVX512_gather,
     'Manual_pack'     : Manual_pack,
@@ -39,9 +42,9 @@ uint32_t displacements[%(CNT)s] = {%(DIS)s};
 
 uint32_t off_sets[%(INDEX_CNT)s] = {%(OFF_SETS)s};
 
-%(BASE_TYPE)s indexed_array[%(CNT)s*%(CNT)s+2 -1] = {%(INDEX_ARRAY)s};
+%(BASE_TYPE)s indexed_array[%(CNT)s*8] = {%(INDEX_ARRAY)s};
 
-%(BASE_TYPE)s packed[%(INDEX_CNT)s];
+%(BASE_TYPE)s packed[%(INDEX_CNT)s]={%(OFF_SETS)s};
 //MPI_Datatype ddt;
 //MPI_Type_indexed( count, blocks, displacements, %(BASE_TYPE)s, &ddt );
 //MPI_Type_commit( &ddt );
@@ -50,17 +53,34 @@ uint32_t off_sets[%(INDEX_CNT)s] = {%(OFF_SETS)s};
 def generate_index(count):
     block_list = [0]*count
     dis_list = [0]*count
-    index_array = [0]* (count*count + 2 - 1) # 2 is the last blockl
+    index_array = [0]* (count*8) # 2 is the last blockl
     blocks = arr.array('l', block_list)
     displacements = arr.array('l', dis_list)
     indexed_array = arr.array('l', index_array)
-    for i in range (0, count):
-        blocks[i] = 1 #2
-        displacements[i] = i + i * count;
+
+    displacements[0] = 0
+
+    for i in range (0, count-1):
+        blocks[i] = randrange(1,5)
+        gap = randrange(1,5)
+        displacements[i+1] = displacements[i] + blocks[i] + gap
+        # get 1 element for per 8 elements
+        #blocks[i] = 1
+        #displacements[i] = i * 8;
+
         #for j in range (0,blocks[i]):
          #  indexed_array[i + i * count + j] = i*count+j+1
-    for i in range (0, count*count+2-1):
+    blocks[count-1] = 1
+    cnt  = 0
+    """
+    for i in range (count):
+        for j in range (blocks[i]):
+            indexed_array[cnt] = displacements[i] + j
+            cnt=cnt+1
+    """
+    for i in range (0, count*8):
         indexed_array[i] = i
+
     return (blocks,displacements,indexed_array)
 
 def get_gather_index(blocks,displacements,count, elem_in_vector):
@@ -98,7 +118,7 @@ def print_program(generator_name, count, count1, off_sets, blocks, displacements
         'CNT'             : int(count),
         'BASE_TYPE'       : str(Get_size_type.get_type(MPI_TYPE)),
     }
-    print TEST_PROGRAM % params
+    print (TEST_PROGRAM % params)
 
 calculate_time="""
 struct timeval tstart, tend;
@@ -148,7 +168,7 @@ def print_papi_end(count):
     params = {
         'CNT'       : int(count),
     }
-    print papi_end
+    print (papi_end)
 
 def main():
     args = sys.argv[1:]
@@ -166,7 +186,7 @@ def main():
     #print type_size
     elem_in_vector = 512 / 8 / type_size
     #print elem_in_vector
-    print FILE_HEADER
+    print (FILE_HEADER)
     print "/* Auto-generated gather code for MPI_Datatype:", MPI_Datatype," MPI_TYPE:",MPI_TYPE,"of type size:",type_size,"*/"
     (blocks,displacements,indexed_array)=generate_index(count)
 #    print blocks
@@ -178,35 +198,38 @@ def main():
 #    print off_sets
 
     ### Sub-function init
-    print calculate_time
+    print (calculate_time)
     Manual_pack.print_manual_pack(MPI_TYPE)
     AVX512_gather.gen_gather_code(off_sets,MPI_TYPE,elem_in_vector)
 
     ### start generate main func
-    print gen_main
+    print (gen_main)
 
-    #print "    for(i=0;i<",count,";i++)"
-    #print "        printf(\"","%f\",","packed[i]);"
-
+    print "    for(i=0;i<",128,";i++){"
+    print "        packed[i] = 0;"
+    print "        printf(\""," %d %d \",","i,","packed[i]);}"
+    print ""
     ### Func calls
     if papi_yes=='papi_yes':
-        print papi_start
+        print (papi_start)
     print "    gettimeofday(&tstart, NULL);"
+    print "    for(i=0;i<",10,";i++){"
     if select_pack == 'manual':
         print "    manual_pack(",count,", blocks, displacements, indexed_array, packed);"
     else:
         print "    gather_pack(",count,", off_sets, indexed_array, packed);"
+    print "   }"
     print "    gettimeofday(&tend, NULL);"
-    print "    printf(\"##Time used(in macro seconds): %lf \\n\" , ","elapsed(&tstart,&tend) );"
+    print "    printf(\"\\nTime-for-blocks-cnt", count," used-in-macro-seconds %lf \\n\"" , ",elapsed(&tstart,&tend)/10 );"
     if papi_yes=='papi_yes':
         print_papi_end(count)
 
-    print flush_cache
-    #print "    for(i=0;i<",count,";i++)"
-    #print "        printf(\"","%f\",","packed[i]);"
-
+    #print flush_cache
+    print "    for(i=0;i<",128,";i++)"
+    print "        printf(\"","%d\",","packed[i]);"
+    print ""
     print "    return 0;"
-    print "}"
+    print ("}")
 
 if __name__ == '__main__':
     main()

@@ -22,5 +22,5 @@ def print_manual_pack(MPI_TYPE):
     params = {
         'GET_TYPE'       : str(Get_size_type.get_type(MPI_TYPE)),
     }
-    print manual_pack % params
+    print (manual_pack % params)
 
