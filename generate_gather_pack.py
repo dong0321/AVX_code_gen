@@ -216,6 +216,8 @@ def main():
     print "    for(i=0;i<",10,";i++){"
     if select_pack == 'manual':
         print "    manual_pack(",count,", blocks, displacements, indexed_array, packed);"
+    elif select_pack == 'memcpy':
+        print " memcpy(packed,indexed_array,",count1*4,");"
     else:
         print "    gather_pack(",count,", off_sets, indexed_array, packed);"
     print "   }"
