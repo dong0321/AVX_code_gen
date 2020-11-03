@@ -38,6 +38,16 @@ gather_ins = """
      }
 """
 
+scatter_ins = """
+    for(i=0;i<%(NUMBER_OF_GATHER)s;i++){
+        index = _mm512_loadu_si512(offsets+i*%(ELEM_IN_VEC)s);
+        gathered_vector = _mm512_load_epi32(src)
+        //_mm512_store_%(512_TO_C)s(src,gathered_vector);
+        _mm512_mask_i32scatter_epi32 (dst, index, gathered_vector, 4);
+       dst += %(ELEM_IN_VEC)s;
+    }
+"""
+
 double_gather_ins = """
     for(i=0;i<%(NUMBER_OF_GATHER)s;i++){
     index = _mm256_loadu_si256(offsets+i*%(ELEM_IN_VEC)s);

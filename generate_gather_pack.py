@@ -3,6 +3,8 @@ import AVX512_gather
 import Manual_pack
 import Get_size_type
 
+import AVX512_scatter
+
 import array as arr
 
 from random import randrange
@@ -11,6 +13,7 @@ from random import randrange
 all_classes = {
     'AVX512_gather'   : AVX512_gather,
     'Manual_pack'     : Manual_pack,
+    'AVX512_scatter'   : AVX512_scatter,
 }
 
 global type_size
@@ -42,7 +45,7 @@ uint32_t displacements[%(CNT)s] = {%(DIS)s};
 
 uint32_t off_sets[%(INDEX_CNT)s] = {%(OFF_SETS)s};
 
-%(BASE_TYPE)s indexed_array[%(CNT)s*8] = {%(INDEX_ARRAY)s};
+%(BASE_TYPE)s indexed_array[%(CNT)s*512] = {%(INDEX_ARRAY)s};
 
 %(BASE_TYPE)s packed[%(INDEX_CNT)s]={%(OFF_SETS)s};
 //MPI_Datatype ddt;
@@ -50,19 +53,19 @@ uint32_t off_sets[%(INDEX_CNT)s] = {%(OFF_SETS)s};
 //MPI_Type_commit( &ddt );
 """
 
-def generate_index(count):
+def generate_index(count, bl0,bl1, gap0,gap1):
     block_list = [0]*count
     dis_list = [0]*count
-    index_array = [0]* (count*8) # 2 is the last blockl
+    #index_array = [0]* (count*8) # 2 is the last blockl
     blocks = arr.array('l', block_list)
     displacements = arr.array('l', dis_list)
-    indexed_array = arr.array('l', index_array)
+    #indexed_array = arr.array('l', index_array)
 
     displacements[0] = 0
 
     for i in range (0, count-1):
-        blocks[i] = randrange(1,5)
-        gap = randrange(1,5)
+        blocks[i] = randrange(bl0,bl1)
+        gap = randrange(gap0,gap1)
         displacements[i+1] = displacements[i] + blocks[i] + gap
         # get 1 element for per 8 elements
         #blocks[i] = 1
@@ -78,7 +81,10 @@ def generate_index(count):
             indexed_array[cnt] = displacements[i] + j
             cnt=cnt+1
     """
-    for i in range (0, count*8):
+
+    index_array = [0]* (displacements[count-1] + gap1*8 )
+    indexed_array = arr.array('l', index_array)
+    for i in range (0,displacements[count-1] + gap1*8):
         indexed_array[i] = i
 
     return (blocks,displacements,indexed_array)
@@ -182,13 +188,20 @@ def main():
     #papi_yes|papi_no
     papi_yes = args[4]
 
+    # add gap info and bl info
+    bl0 =  int(args[5])
+    bl1 = int(args[6])
+    gap0 = int(args[7])
+    gap1 = int(args[8])+1
+
+
     type_size = Get_size_type.get_size(MPI_TYPE)
     #print type_size
     elem_in_vector = 512 / 8 / type_size
     #print elem_in_vector
     print (FILE_HEADER)
     print "/* Auto-generated gather code for MPI_Datatype:", MPI_Datatype," MPI_TYPE:",MPI_TYPE,"of type size:",type_size,"*/"
-    (blocks,displacements,indexed_array)=generate_index(count)
+    (blocks,displacements,indexed_array)=generate_index(count,bl0,bl1, gap0,gap1  )
 #    print blocks
 #    print displacements
 #    print indexed_array
@@ -200,8 +213,10 @@ def main():
     ### Sub-function init
     print (calculate_time)
     Manual_pack.print_manual_pack(MPI_TYPE)
+    Manual_pack.print_equal_pack(MPI_TYPE)
     AVX512_gather.gen_gather_code(off_sets,MPI_TYPE,elem_in_vector)
-
+    
+    AVX512_scatter.gen_scatter_code(off_sets,MPI_TYPE,elem_in_vector)
     ### start generate main func
     print (gen_main)
 
@@ -218,8 +233,12 @@ def main():
         print "    manual_pack(",count,", blocks, displacements, indexed_array, packed);"
     elif select_pack == 'memcpy':
         print " memcpy(packed,indexed_array,",count1*4,");"
-    else:
+    elif select_pack == 'gather':
         print "    gather_pack(",count,", off_sets, indexed_array, packed);"
+    elif select_pack == 'equal_pack':
+        print "    equal_pack(",count,", blocks, displacements, indexed_array, packed);"
+    else:
+        print "    scatter_pack(",count,", off_sets, packed, indexed_array);"
     print "   }"
     print "    gettimeofday(&tend, NULL);"
     print "    printf(\"\\nTime-for-blocks-cnt", count," used-in-macro-seconds %lf \\n\"" , ",elapsed(&tstart,&tend)/10 );"
